@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 
 raid_scheduler_bot.sqlite
+settings.json
