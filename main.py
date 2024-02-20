@@ -85,14 +85,14 @@ class RaidScheduler(commands.Cog):
             where date = ?
             and update_type = ?
         """, (date_db, update_type_db)) as cursor:
-            if raid_message_id := await cursor.fetchone():
+            if raid_message_id := (await cursor.fetchone())[0]:
                 try:
-                    message = await ctx.channel.fetch_message(raid_message_id[0])
+                    message = await ctx.channel.fetch_message(raid_message_id)
                 except discord.NotFound:
                     await self.bot.db.execute("""
                         delete from raids
                         where discord_message = ?
-                    """, (raid_message_id[0],))
+                    """, (raid_message_id,))
                 else:
                     return await message.reply('A raid already exists at this time.', mention_author=False)
 
