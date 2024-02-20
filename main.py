@@ -52,7 +52,8 @@ class RaidScheduler(commands.Cog):
     @commands.command(name='setyesemoji')
     @commands.has_permissions(manage_emojis=True)
     async def set_yes_emoji(self, ctx: commands.Context, emoji: int | str):
-        pass
+        print(emoji)
+        await ctx.reply(emoji)
 
     @commands.command(name='setmaybeemoji')
     @commands.has_permissions(manage_emojis=True)
@@ -85,14 +86,14 @@ class RaidScheduler(commands.Cog):
             where date = ?
             and update_type = ?
         """, (date_db, update_type_db)) as cursor:
-            if raid_message_id := (await cursor.fetchone())[0]:
+            if raid_message_id := await cursor.fetchone():
                 try:
-                    message = await ctx.channel.fetch_message(raid_message_id)
+                    message = await ctx.channel.fetch_message(raid_message_id[0])
                 except discord.NotFound:
                     await self.bot.db.execute("""
                         delete from raids
                         where discord_message = ?
-                    """, (raid_message_id,))
+                    """, (raid_message_id[0],))
                 else:
                     return await message.reply('A raid already exists at this time.', mention_author=False)
 
