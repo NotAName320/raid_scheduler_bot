@@ -1,6 +1,8 @@
 import asyncio
+from datetime import date, datetime, time, timedelta
 import json
 import sys
+import traceback
 
 import aiosqlite
 import discord
@@ -58,41 +60,41 @@ class RaidScheduler(commands.Cog):
         pass
 
     @commands.command(name='schedule')
-    async def schedule(self, ctx: commands.Context, date: str, update_type: str, puppet_count: int, *,
+    async def schedule(self, ctx: commands.Context, raid_date: str, update_type: str, puppet_count: int, *,
                        extra_info: str = ''):
-        update_type = update_type.lower()
+        raid_date, update_type = raid_date.lower(), update_type.lower()
         role = ctx.guild.get_role(self.bot.privileged_role)
         if not role:
             return await ctx.reply('The server\'s privileged role is misconfigured. Someone should probably fix that.')
         if role not in ctx.author.roles:
             return await ctx.reply('You aren not allowed to schedule tag raids. You may be missing a mask.')
         try:
-            date_db = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].index(date.lower())
+            date_db = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].index(raid_date)
         except ValueError:
             return await ctx.reply('Please write your date as a full day of the week.')
         try:
-            update_type_db = ['major', 'minor'].index(update_type.lower())
+            update_type_db = ['major', 'minor'].index(update_type)
         except ValueError:
             return await ctx.reply('Please specify major or minor update.')
         if not 1 <= puppet_count <= 200:
             return await ctx.reply('Please specify a reasonable puppet amount.')
 
-        # async with self.bot.db.execute("""
-        #     select discord_message
-        #     from raids
-        #     where date = ?
-        #     and update_type = ?
-        # """, (date_db, update_type)) as cursor:
-        #     if raid_message_id := await cursor.fetchone():
-        #         try:
-        #             message = await ctx.fetch_message(raid_message_id)
-        #         except discord.NotFound:
-        #             await self.bot.db.execute("""
-        #                 delete from raids
-        #                 where discord_message = ?
-        #             """, (raid_message_id,))
-        #         else:
-        #             return await message.reply('A raid already exists at this time.', mention_author=False)
+        async with self.bot.db.execute("""
+            select discord_message
+            from raids
+            where date = ?
+            and update_type = ?
+        """, (date_db, update_type_db)) as cursor:
+            if raid_message_id := await cursor.fetchone():
+                try:
+                    message = await ctx.channel.fetch_message(raid_message_id[0])
+                except discord.NotFound:
+                    await self.bot.db.execute("""
+                        delete from raids
+                        where discord_message = ?
+                    """, (raid_message_id[0],))
+                else:
+                    return await message.reply('A raid already exists at this time.', mention_author=False)
 
         ping_role = getattr(ctx.guild.get_role(self.bot.ping_role), 'mention', '*Ping role not found*')
 
@@ -102,21 +104,29 @@ class RaidScheduler(commands.Cog):
         yes_emoji = discord.utils.get(ctx.guild.emojis, id=self.bot.yes_emoji) or self.bot.yes_emoji
         maybe_emoji = discord.utils.get(ctx.guild.emojis, id=self.bot.maybe_emoji) or self.bot.maybe_emoji
 
-        # TODO: add unix timestamp to messasge
+        next_update = date.today()
+        while next_update.weekday() != date_db:
+            next_update += timedelta(days=1)
+        update_time = time(23, 59) if update_type == 'major' else time(11, 59)
+        next_update = datetime.combine(next_update, update_time)
+        if next_update < datetime.now():
+            next_update += timedelta(days=7)
 
         message = await ctx.channel.send(f"{ping_role}\n"
-                                         f"**When:** {date.capitalize()} {update_type.capitalize()}\n"
+                                         f"**When:** {raid_date.capitalize()} {update_type.capitalize()} "
+                                         f"(<t:{int(next_update.timestamp())}:R>)\n"
                                          f"**Number of puppets**: {puppet_count}\n"
                                          f"{extra_info}\n"
                                          f"React with {yes_emoji} for coming, or {maybe_emoji} for maybe")
         await message.add_reaction(yes_emoji)
         await message.add_reaction(maybe_emoji)
 
-        # await self.bot.db.execute("""
-        #     insert into raids values(
-        #         ?, ?, ?, ?
-        #     )
-        # """)
+        await self.bot.db.execute("""
+            insert into raids values(
+                ?, ?, ?
+            )
+        """, (date_db, update_type_db, message.id))
+        await self.bot.db.commit()
 
 
 async def login():
@@ -126,7 +136,6 @@ async def login():
             (
                 date            integer not null,
                 update_type     integer not null,
-                participants    blob,
                 discord_message integer not null
             );
         """)
@@ -175,6 +184,11 @@ async def login():
             print('Logged in as')
             print(bot.user)
             print(bot.user.id)
+
+        @bot.event
+        async def on_command_error(ctx, exception):
+            await ctx.reply(exception)
+            traceback.print_exception(exception)
 
         try:
             await bot.start(token=token)
