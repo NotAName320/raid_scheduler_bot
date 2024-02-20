@@ -12,10 +12,10 @@ from discord.ext import commands
 class DBBot(commands.Bot):
     def __init__(self, command_prefix, *, intents, **options):
         self.db: aiosqlite.Connection = options.pop('db')
-        self.privileged_role: int = options.pop('privileged_role')
-        self.ping_role: int = options.pop('ping_role')
+        self.privileged_role: int = int(options.pop('privileged_role'))
+        self.ping_role: int = int(options.pop('ping_role'))
         self.yes_emoji: str = options.pop('yes_emoji')
-        self.maybe_emoji = options.pop('maybe_emoji')
+        self.maybe_emoji: str = options.pop('maybe_emoji')
         super().__init__(command_prefix, intents=intents, **options)
 
 
@@ -144,9 +144,7 @@ async def login():
         try:
             with open('./settings.json') as jsonFile:
                 settings = json.load(jsonFile)
-                token, command_prefix, privileged_role, ping_role = (settings['token'], settings['command_prefix'],
-                                                                     settings['privileged_role'], settings['ping_role'])
-                yes_emoji, maybe_emoji = settings['yes_emoji'], settings['maybe_emoji']
+                token = settings.pop('token')
         except (FileNotFoundError, KeyError) as e:
             default_json = {
                         'token': '',
@@ -173,9 +171,7 @@ async def login():
 
         intents = discord.Intents.default()
         intents.message_content = True
-        bot = DBBot(command_prefix=command_prefix, intents=intents, help_command=commands.MinimalHelpCommand(), db=db,
-                    privileged_role=int(privileged_role), ping_role=int(ping_role), yes_emoji=yes_emoji,
-                    maybe_emoji=maybe_emoji)
+        bot = DBBot(**settings, intents=intents, help_command=commands.MinimalHelpCommand(), db=db)
         await bot.add_cog(RaidScheduler(bot))
 
         @bot.event
