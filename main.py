@@ -51,14 +51,25 @@ class RaidScheduler(commands.Cog):
 
     @commands.command(name='setyesemoji')
     @commands.has_permissions(manage_emojis=True)
-    async def set_yes_emoji(self, ctx: commands.Context, emoji: int | str):
-        print(emoji)
-        await ctx.reply(emoji)
+    async def set_yes_emoji(self, ctx: commands.Context, emoji: str):
+        self.bot.yes_emoji = emoji
+        with open('./settings.json') as jsonFile:
+            settings = json.load(jsonFile)
+            settings['yes_emoji'] = emoji
+        with open('./settings.json', 'w') as jsonFile:
+            json.dump(settings, jsonFile, indent=4)
+        await ctx.reply(f'Emoji successfully changed to {emoji}!')
 
     @commands.command(name='setmaybeemoji')
     @commands.has_permissions(manage_emojis=True)
     async def set_maybe_emoji(self, ctx: commands.Context, emoji: int | str):
-        pass
+        self.bot.maybe_emoji = emoji
+        with open('./settings.json') as jsonFile:
+            settings = json.load(jsonFile)
+            settings['maybe_emoji'] = emoji
+        with open('./settings.json', 'w') as jsonFile:
+            json.dump(settings, jsonFile, indent=4)
+        await ctx.reply(f'Emoji successfully changed to {emoji}!')
 
     @commands.command(name='schedule')
     async def schedule(self, ctx: commands.Context, raid_date: str, update_type: str, puppet_count: int, *,
@@ -102,8 +113,8 @@ class RaidScheduler(commands.Cog):
         if extra_info:
             extra_info = f'**Additional notes:** {extra_info}\n'
 
-        yes_emoji = discord.utils.get(ctx.guild.emojis, id=self.bot.yes_emoji) or self.bot.yes_emoji
-        maybe_emoji = discord.utils.get(ctx.guild.emojis, id=self.bot.maybe_emoji) or self.bot.maybe_emoji
+        yes_emoji = discord.PartialEmoji.from_str(self.bot.yes_emoji)
+        maybe_emoji = discord.PartialEmoji.from_str(self.bot.maybe_emoji)
 
         next_update = date.today()
         while next_update.weekday() != date_db:
