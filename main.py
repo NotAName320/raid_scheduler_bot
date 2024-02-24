@@ -12,8 +12,8 @@ from discord.ext import commands
 class DBBot(commands.Bot):
     def __init__(self, command_prefix, *, intents, **options):
         self.db: aiosqlite.Connection = options.pop('db')
-        self.privileged_role: int = int(options.pop('privileged_role'))
-        self.ping_role: int = int(options.pop('ping_role'))
+        self.privileged_role = int(options.pop('privileged_role'))
+        self.ping_role = int(options.pop('ping_role'))
         self.yes_emoji: str = options.pop('yes_emoji')
         self.maybe_emoji: str = options.pop('maybe_emoji')
         super().__init__(command_prefix, intents=intents, **options)
@@ -139,6 +139,35 @@ class RaidScheduler(commands.Cog):
             )
         """, (date_db, update_type_db, message.id))
         await self.bot.db.commit()
+
+    @commands.Cog.listener('on_message')
+    async def remove_raid(self, message: discord.Message):
+        priv_role = message.guild.get_role(self.bot.privileged_role)
+        if (message.author == self.bot.user or priv_role not in message.author.roles or
+                message.content not in {'remove', 'cancel', 'delete'} or not message.reference):
+            return
+        raid_message = await message.channel.fetch_message(message.reference.message_id)
+        if raid_message.author != self.bot.user:
+            return
+        async with self.bot.db.execute("""
+            select exists(
+            select 1
+            from raids
+            where discord_message = ?)
+        """, (raid_message.id,)) as cursor:
+            if not (await cursor.fetchone())[0]:
+                return
+
+        await raid_message.edit(content=f'~~{raid_message.content}~~\n\n**CANCELED**')
+        # await raid_message.clear_reactions()
+
+        await self.bot.db.execute("""
+            delete from raids
+            where discord_message = ?
+        """, (raid_message.id,))
+        await self.bot.db.commit()
+
+        return await message.reply('The raid has been canceled.')
 
 
 async def login():
